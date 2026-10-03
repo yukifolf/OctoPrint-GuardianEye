@@ -179,7 +179,8 @@ class PrintMonitor:
             )
 
             # 3. Check min_layer threshold
-            min_layer = settings.get_int(["min_layer_for_vision"]) or 2
+            min_layer_setting = settings.get_int(["min_layer_for_vision"])
+            min_layer = min_layer_setting if min_layer_setting is not None else 1
             if layer is not None and layer < min_layer:
                 _logger.info("Cycle %d: skipping vision (layer %s < %d)", cycle_num, layer, min_layer)
                 self._cleanup_snapshot(saved_path, settings)
@@ -223,11 +224,11 @@ class PrintMonitor:
                     )
                 else:
                     if self.state.consecutive_failures > 0:
+                        self.state.consecutive_failures = max(0, self.state.consecutive_failures - 1)
                         _logger.info(
-                            "Cycle %d: Vision OK — strike counter reset (was %d)",
+                            "Cycle %d: Vision OK — strike counter decremented to %d",
                             cycle_num, self.state.consecutive_failures,
                         )
-                    self.state.consecutive_failures = 0
                     _logger.info(
                         "Cycle %d: Vision OK (%dms) — %s",
                         cycle_num, verdict.latency_ms, verdict.reason[:80],

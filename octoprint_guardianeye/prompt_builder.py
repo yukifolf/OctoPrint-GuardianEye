@@ -9,44 +9,41 @@ Ported from bambu-lab-mcp/src/print-monitor.ts:buildVisionPrompt(),
 generalized for any printer/camera setup.
 """
 
-_DEFAULT_PROMPT = """You are a 3D print failure detector. You are analyzing a single camera frame from a 3D printer's webcam.
+_DEFAULT_PROMPT = """You are an expert 3D print failure detector. You are analyzing a camera frame from a 3D printer's webcam to evaluate the state of the active print.
 
 PRINTER CONTEXT:
 - Camera: fixed webcam pointed at the build area
-- Build plate: may have glue residue, tape, or surface texture — this is NORMAL
-- The toolhead moves fast and may appear blurred — this is NORMAL
+- Build plate: may have glue residue, tape, bed markings, or surface texture — this is NORMAL
+- The toolhead / extruder moves fast and may appear blurred — this is NORMAL
 
 {stage_context}
 
-NORMAL — do NOT flag:
-- Glue residue, tape, or surface treatments on the build plate
-- Purge lines, purge blobs, or wipe towers anywhere on the bed
-- Skirt/brim outlines around objects
-- Thin first layers during early print stages
-- Motion blur on the toolhead or gantry
-- Small wisps of stringing between nearby parts (cosmetic, not failure)
-- Objects that look short/flat because the print is still early
-- ANY pre-existing objects, blobs, filament scraps, or debris sitting on the bed — these are leftovers from previous prints and are completely NORMAL. They may be colorful, tangled, or messy-looking but they are NOT an active failure.
-- Static blobs or clumps of filament anywhere on the bed that are NOT connected to the nozzle
+NORMAL FEATURES — do NOT flag as failure:
+- Purge lines along the edge of the bed, purge blobs, or prime/wipe towers
+- Skirt or brim outlines printed around the base of the model
+- Thin, sparse first layers during early stages
+- Motion blur of the moving toolhead, extruder, or gantry
+- Minor stringing (fine hair-like wisps between parts) that does not disrupt model structure
+- Objects that look short/flat because the print is still in early layers
 
-FAILURE — only flag these when CLEARLY and ACTIVELY happening:
-- Spaghetti: filament being ACTIVELY extruded by the nozzle into a chaotic tangled mess instead of structured layers. The spaghetti must be connected to or growing from the nozzle/active print area. Static debris already sitting on the bed is NOT spaghetti.
-- Detachment: a printed object has clearly fallen over, shifted position, or peeled entirely off the bed DURING this print
-- Printing into air: the nozzle is extruding filament high above the bed with NO object underneath it
+FAILURE SIGNS — FLAG AS FAIL if any of these are visible:
+- Spaghetti: loose, tangled, chaotic nest of filament noodles anywhere on the bed, around the model, or falling off the plate.
+- Detachment: the printed model has detached from the build plate, slid out of position, tipped over, or is being dragged by the nozzle.
+- Severe Warping: the base or corners of the printed model have severely curled or peeled upward off the build plate.
+- Layer Shifting: noticeable horizontal displacement or staircase-like misalignment between stacked layers of the object.
+- Printing into Air: the nozzle is extruding in mid-air above the model with nothing beneath it, or the model stopped growing while the head moves above it.
+- Model Collapse / Destruction: broken walls, collapsed infill, shattered geometry, or massive clumps/blobs of plastic engulfing the nozzle or print.
 
-KEY DISTINCTION: Only flag ACTIVE failures — problems happening RIGHT NOW with the current print. Pre-existing objects, blobs, scraps, or debris on the bed from previous prints are NOT failures regardless of how messy they look.
+DECISION GUIDELINES:
+1. Examine the active 3D printed model on the build plate.
+2. If the printed model is cleanly forming stacked layers and firmly adhering to the bed, it is OK.
+3. If the model has detached, tipped over, shifted layers, or turned into spaghetti/loose filament, it is a FAIL.
+4. Purge lines on the periphery are normal; chaos, detachment, or noodles in the active model area are NOT normal.
 
-CRITICAL RULES:
-1. You MUST be conservative. A false positive stops the print and wastes time, material, and money.
-2. If you are less than 95% confident it is an ACTIVE failure, say OK.
-3. Glue residue is NOT stringing. Thin early layers are NOT detachment. Blobs on the bed are NOT spaghetti.
-4. One image can be ambiguous — when in doubt, ALWAYS say OK.
-5. If something looks messy but is NOT connected to the nozzle or active print, it is pre-existing debris — say OK.
-
-Respond with EXACTLY one line:
+Respond in this format:
 VERDICT: OK
 or
-VERDICT: FAIL | <brief reason>"""
+VERDICT: FAIL | <concise failure reason>"""
 
 
 def _build_stage_context(layer, total_layers, progress):
@@ -58,18 +55,20 @@ def _build_stage_context(layer, total_layers, progress):
     if early:
         return (
             f"STAGE: Early print (layer {layer}/{total_str}, {progress or 0}%). "
-            "Only thin outlines, skirts, and first layers on the bed. Very little material "
-            "is visible — this is NORMAL. Do NOT flag thin/sparse prints at this stage."
+            "Only initial base layers, skirts, or brim are on the bed. "
+            "Ensure the first layers are sticking flatly to the bed without peeling, bunching, or dragging."
         )
     elif late:
         return (
             f"STAGE: Late print (layer {layer}/{total_str}, {progress or 0}%). "
-            "Objects should be nearly complete with full height and defined shapes."
+            "The 3D printed model should be tall and nearly complete with defined shape. "
+            "Check for layer shifts, top surface collapse, or detachment caused by leverage."
         )
     else:
         return (
             f"STAGE: Mid print (layer {layer or '?'}/{total_str}, {progress or 0}%). "
-            "Objects should be visibly forming with stacked layers. Some height is expected."
+            "The 3D printed model should have visible vertical height with stacked layers adhering firmly to the bed. "
+            "Check for spaghetti, detachment, warping, or layer shifts."
         )
 
 

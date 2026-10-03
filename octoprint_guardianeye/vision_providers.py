@@ -13,6 +13,7 @@ All providers accept custom endpoints for self-hosted/proxy setups.
 Ported from bambu-lab-mcp/src/vision-provider.ts with 3 new providers added.
 """
 
+import re
 import time
 import logging
 import requests
@@ -65,25 +66,62 @@ class VisionAnalysisResult:
 
 
 def _parse_verdict(reply):
-    """Parse 'VERDICT: OK' or 'VERDICT: FAIL | reason' from AI response."""
-    reply = reply.strip()
-    upper = reply.upper()
+    """Parse verdict and failure reason from AI response."""
+    if not reply or not reply.strip():
+        return False, "empty response from vision model", 0.0
 
-    if "VERDICT: FAIL" in upper:
-        idx = upper.index("VERDICT: FAIL")
-        after = reply[idx + len("VERDICT: FAIL"):]
-        reason = after.lstrip().lstrip("|").strip()
-        return True, reason or "visual failure detected", 0.95
+    cleaned = reply.strip()
+    upper = cleaned.upper()
+    lines = [line.strip() for line in cleaned.splitlines() if line.strip()]
 
-    if "VERDICT: OK" in upper:
-        idx = upper.index("VERDICT: OK")
-        after = reply[idx + len("VERDICT: OK"):]
-        reason = after.lstrip().lstrip("|").strip()
-        return False, reason or "print looks normal", 0.0
+    # 1. Check for explicit VERDICT / STATUS lines first
+    explicit_fail = re.compile(r"(?:VERDICT|STATUS|RESULT)\s*[:\-]?\s*(?:FAIL(?:ED|URE)?|NOT\s+OK)\b", re.IGNORECASE)
+    explicit_ok = re.compile(r"(?:VERDICT|STATUS|RESULT)\s*[:\-]?\s*\bOK\b", re.IGNORECASE)
 
-    # Fallback: if AI didn't follow format, be conservative (OK)
-    _logger.warning("Vision response didn't match expected format, treating as OK: %s", reply[:200])
-    return False, reply[:200], 0.0
+    for line in lines:
+        m = explicit_fail.search(line)
+        if m:
+            after = line[m.end():].strip().lstrip("*|:- ").strip()
+            return True, after or "visual failure detected", 0.95
+
+    for line in lines:
+        if "NOT OK" not in line.upper():
+            m = explicit_ok.search(line)
+            if m:
+                after = line[m.end():].strip().lstrip("*|:- ").strip()
+                return False, after or "print looks normal", 0.0
+
+    # 2. Check for lines starting with FAIL / FAILED / FAILURE
+    line_start_fail = re.compile(r"^\s*[*#_]*\s*(?:FAIL(?:ED|URE)?|NOT\s+OK)\b", re.IGNORECASE)
+    line_start_ok = re.compile(r"^\s*[*#_]*\s*OK\b", re.IGNORECASE)
+
+    for line in lines:
+        m = line_start_fail.search(line)
+        if m:
+            after = line[m.end():].strip().lstrip("*|:- ").strip()
+            return True, after or "visual failure detected", 0.95
+
+    for line in lines:
+        if "NOT OK" not in line.upper():
+            m = line_start_ok.search(line)
+            if m:
+                after = line[m.end():].strip().lstrip("*|:- ").strip()
+                return False, after or "print looks normal", 0.0
+
+    # 3. Fallback semantic failure keywords if formatting was not followed
+    failure_keywords = [
+        "SPAGHETTI", "DETACHED", "DETACHMENT", "LAYER SHIFT",
+        "WARPING", "PRINT FAILED", "PRINT FAILURE", "AIR PRINTING",
+        "NOZZLE CLOG", "BLOB OF DEATH"
+    ]
+    for kw in failure_keywords:
+        if kw in upper:
+            _logger.info("Vision response contained failure keyword '%s': %s", kw, cleaned[:120])
+            return True, cleaned[:150], 0.85
+
+    # 4. Fallback: treat as OK
+    _logger.warning("Vision response didn't match expected format, treating as OK: %s", cleaned[:200])
+    return False, cleaned[:200], 0.0
 
 
 class VisionProviderBase:
@@ -133,7 +171,7 @@ class OpenAIVisionProvider(VisionProviderBase):
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
                     ],
                 }],
-                "max_tokens": 150,
+                "max_tokens": 300,
             },
             timeout=30,
         )
@@ -172,7 +210,7 @@ class AzureOpenAIVisionProvider(VisionProviderBase):
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
                     ],
                 }],
-                "max_tokens": 150,
+                "max_tokens": 300,
             },
             timeout=30,
         )
@@ -210,7 +248,7 @@ class AnthropicVisionProvider(VisionProviderBase):
             },
             json={
                 "model": self.model,
-                "max_tokens": 150,
+                "max_tokens": 300,
                 "messages": [{
                     "role": "user",
                     "content": [
@@ -269,7 +307,7 @@ class XAIVisionProvider(VisionProviderBase):
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
                     ],
                 }],
-                "max_tokens": 150,
+                "max_tokens": 300,
             },
             timeout=30,
         )
@@ -307,7 +345,7 @@ class GeminiVisionProvider(VisionProviderBase):
                         {"inline_data": {"mime_type": "image/jpeg", "data": image_base64}},
                     ],
                 }],
-                "generationConfig": {"maxOutputTokens": 150},
+                "generationConfig": {"maxOutputTokens": 300},
             },
             timeout=30,
         )
@@ -349,7 +387,7 @@ class OllamaVisionProvider(VisionProviderBase):
                     "images": [image_base64],
                 }],
                 "stream": False,
-                "options": {"num_predict": 150},
+                "options": {"num_predict": 300},
             },
             timeout=120,  # Local models can be slow
         )

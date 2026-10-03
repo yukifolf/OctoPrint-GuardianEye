@@ -73,7 +73,7 @@ class GuardianEyePlugin(
             "azure_api_version": "2025-01-01-preview",
             # Monitoring
             "interval_seconds": 60,
-            "min_layer_for_vision": 2,
+            "min_layer_for_vision": 1,
             "fail_strikes": 3,
             "layer_height": 0.2,
             # Snapshot
