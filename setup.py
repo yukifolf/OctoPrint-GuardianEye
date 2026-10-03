@@ -3,11 +3,11 @@ from setuptools import setup
 plugin_identifier = "guardianeye"
 plugin_package = "octoprint_guardianeye"
 plugin_name = "OctoPrint-GuardianEye"
-plugin_version = "1.0.0"
+plugin_version = "1.0.2"
 plugin_description = "AI-powered print failure detection using camera snapshots. Supports OpenAI, Azure OpenAI, Anthropic, xAI/Grok, Google Gemini, and Ollama."
-plugin_author = "Tim Schwarz"
-plugin_author_email = "schwarztim@users.noreply.github.com"
-plugin_url = "https://github.com/schwarztim/OctoPrint-GuardianEye"
+plugin_author = "Tim Schwarz, Yukifolf"
+plugin_author_email = "schwarztim@users.noreply.github.com, yukifolf@users.noreply.github.com"
+plugin_url = "https://github.com/yukifolf/OctoPrint-GuardianEye"
 plugin_license = "AGPLv3"
 plugin_additional_data = []
 
