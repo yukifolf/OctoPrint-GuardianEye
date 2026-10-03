@@ -31,6 +31,10 @@ _COST_TABLE = {
     # xAI
     ("xai", "grok-2-vision-latest"): 0.005,
     # Gemini
+    ("gemini", "gemini-3.8-flash"): 0.0009,
+    ("gemini", "gemini-3.7-flash"): 0.0007,
+    ("gemini", "gemini-3.5-flash"): 0.0005,
+    ("gemini", "gemini-3.5-flash-lite"): 0.0003,
     ("gemini", "gemini-2.0-flash"): 0.0001,
     ("gemini", "gemini-1.5-flash"): 0.0001,
     ("gemini", "gemini-1.5-pro"): 0.003,

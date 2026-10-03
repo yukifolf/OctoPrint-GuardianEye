@@ -6,7 +6,7 @@ Supports 6 providers, all using only the `requests` library:
   - Azure OpenAI
   - Anthropic (claude-sonnet-4-20250514)
   - xAI / Grok (grok-2-vision-latest)
-  - Google Gemini (gemini-2.0-flash)
+  - Google Gemini (gemini-3.8-flash)
   - Ollama (llava, fully local/free)
 
 All providers accept custom endpoints for self-hosted/proxy setups.
@@ -124,6 +124,28 @@ def _parse_verdict(reply):
     return False, cleaned[:200], 0.0
 
 
+def _check_response(resp, provider_name):
+    """Raise a clear exception if HTTP request failed, extracting API error details."""
+    if resp.ok:
+        return
+    error_msg = ""
+    try:
+        data = resp.json()
+        if "error" in data:
+            err = data["error"]
+            if isinstance(err, dict):
+                error_msg = err.get("message") or str(err)
+            else:
+                error_msg = str(err)
+        elif "message" in data:
+            error_msg = data["message"]
+    except Exception:
+        pass
+    if not error_msg:
+        error_msg = resp.text[:300] if resp.text else f"HTTP {resp.status_code}"
+    raise RuntimeError(f"{provider_name} API error ({resp.status_code}): {error_msg}")
+
+
 class VisionProviderBase:
     name = "base"
     model = ""
@@ -175,7 +197,7 @@ class OpenAIVisionProvider(VisionProviderBase):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, self.name)
         data = resp.json()
         reply = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         failed, reason, confidence = _parse_verdict(reply)
@@ -214,7 +236,7 @@ class AzureOpenAIVisionProvider(VisionProviderBase):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, self.name)
         data = resp.json()
         reply = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         failed, reason, confidence = _parse_verdict(reply)
@@ -262,7 +284,7 @@ class AnthropicVisionProvider(VisionProviderBase):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, self.name)
         data = resp.json()
         reply = ""
         for block in data.get("content", []):
@@ -311,7 +333,7 @@ class XAIVisionProvider(VisionProviderBase):
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, self.name)
         data = resp.json()
         reply = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         failed, reason, confidence = _parse_verdict(reply)
@@ -323,22 +345,62 @@ class XAIVisionProvider(VisionProviderBase):
 
 
 class GeminiVisionProvider(VisionProviderBase):
-    """Google Gemini — uses generativelanguage API with inline_data format."""
+    """Google Gemini — uses modern Interactions API for Gemini 3+ or generateContent for legacy models."""
     name = "gemini"
 
-    def __init__(self, api_key, model="gemini-2.0-flash", endpoint=""):
+    def __init__(self, api_key, model="gemini-3.8-flash", endpoint=""):
         self.api_key = api_key
-        self.model = model
+        self.model = model.strip() if model else "gemini-3.8-flash"
         self.endpoint = (endpoint.strip().rstrip("/") if endpoint and endpoint.strip()
                          else "https://generativelanguage.googleapis.com")
 
     def analyze(self, image_base64, prompt):
         start = time.time()
-        url = f"{self.endpoint}/v1beta/models/{self.model}:generateContent"
-        resp = requests.post(
-            url,
-            headers={"Content-Type": "application/json", "x-goog-api-key": self.api_key},
-            json={
+        is_gemini_3 = self.model.startswith("gemini-3") or "/gemini-3" in self.model
+
+        if is_gemini_3:
+            url = self.endpoint
+            if not url.endswith("/interactions"):
+                url = f"{url.rstrip('/')}/v1beta/interactions"
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.api_key,
+                "Api-Revision": "2026-05-20",
+            }
+            payload = {
+                "model": self.model,
+                "input": [
+                    {"type": "image", "mime_type": "image/jpeg", "data": image_base64},
+                    {"type": "text", "text": prompt},
+                ],
+                "generation_config": {
+                    "max_output_tokens": 500,
+                    "thinking_level": "low",
+                },
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            _check_response(resp, self.name)
+            data = resp.json()
+
+            reply = ""
+            if "output_text" in data and data["output_text"]:
+                reply = data["output_text"].strip()
+            else:
+                for step in data.get("steps", []):
+                    if step.get("type") == "model_output":
+                        for block in step.get("content", []):
+                            if block.get("type") == "text":
+                                reply += block.get("text", "")
+                        if reply:
+                            break
+                reply = reply.strip()
+        else:
+            url = f"{self.endpoint}/v1beta/models/{self.model}:generateContent"
+            headers = {
+                "Content-Type": "application/json",
+                "x-goog-api-key": self.api_key,
+            }
+            payload = {
                 "contents": [{
                     "parts": [
                         {"text": prompt},
@@ -346,19 +408,20 @@ class GeminiVisionProvider(VisionProviderBase):
                     ],
                 }],
                 "generationConfig": {"maxOutputTokens": 300},
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        reply = ""
-        candidates = data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            for part in parts:
-                if "text" in part:
-                    reply = part["text"].strip()
-                    break
+            }
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            _check_response(resp, self.name)
+            data = resp.json()
+
+            reply = ""
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                for part in parts:
+                    if "text" in part:
+                        reply = part["text"].strip()
+                        break
+
         failed, reason, confidence = _parse_verdict(reply)
         return VisionAnalysisResult(
             failed=failed, reason=reason, confidence=confidence,
@@ -391,7 +454,7 @@ class OllamaVisionProvider(VisionProviderBase):
             },
             timeout=120,  # Local models can be slow
         )
-        resp.raise_for_status()
+        _check_response(resp, self.name)
         data = resp.json()
         reply = data.get("message", {}).get("content", "").strip()
         failed, reason, confidence = _parse_verdict(reply)
@@ -406,7 +469,7 @@ class OllamaVisionProvider(VisionProviderBase):
         """Check if Ollama is running and the model is available."""
         try:
             resp = requests.get(f"{self.endpoint}/api/tags", timeout=10)
-            resp.raise_for_status()
+            _check_response(resp, self.name)
             models = [m.get("name", "") for m in resp.json().get("models", [])]
             found = any(self.model in m for m in models)
             if found:
@@ -449,7 +512,7 @@ def create_vision_provider(settings):
 
     elif provider_name == "gemini":
         return GeminiVisionProvider(
-            api_key, model=settings.get("model", "gemini-2.0-flash"), endpoint=endpoint,
+            api_key, model=settings.get("model", "gemini-3.8-flash"), endpoint=endpoint,
         )
 
     elif provider_name == "ollama":

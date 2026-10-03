@@ -59,7 +59,7 @@ pip install -e .
 
 1. **Install the plugin** (see above)
 2. **Choose a provider** in Settings > GuardianEye:
-   - **Cheapest cloud:** Gemini (`gemini-2.0-flash`) — ~$0.0001/check
+   - **Cheapest cloud:** Gemini (`gemini-3.8-flash`) — ~$0.0009/check
    - **Best balance:** OpenAI (`gpt-4o-mini`) — ~$0.0003/check
    - **Fully free/offline:** Ollama (`llava`) — $0.00/check
 3. **Enter your API key** (not needed for Ollama)
@@ -74,7 +74,7 @@ pip install -e .
 | **Azure OpenAI**  | gpt-4o-mini              | $0.0003     | Yes              | Enterprise/compliance needs  |
 | **Anthropic**     | claude-sonnet-4-20250514 | $0.005      | Yes              | Highest quality analysis     |
 | **xAI / Grok**    | grok-2-vision-latest     | $0.005      | Yes              | X.ai platform                |
-| **Google Gemini** | gemini-2.0-flash         | $0.0001     | Yes              | Cheapest cloud option        |
+| **Google Gemini** | gemini-3.8-flash         | $0.0009     | Yes              | Fast multimodal analysis     |
 | **Ollama**        | llava                    | $0.00       | No               | 100% local, fully offline    |
 
 ### Setting Up Ollama (Free/Offline)

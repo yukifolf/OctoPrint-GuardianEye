@@ -105,7 +105,7 @@ $(function () {
       azure_openai: "gpt-4o-mini",
       anthropic: "claude-sonnet-4-20250514",
       xai: "grok-2-vision-latest",
-      gemini: "gemini-2.0-flash",
+      gemini: "gemini-3.8-flash",
       ollama: "llava",
     };
     var modelHelp = {
@@ -113,7 +113,7 @@ $(function () {
       azure_openai: "Model name (deployment name is set separately below)",
       anthropic: "e.g. claude-sonnet-4-20250514, claude-haiku-4-5-20251001",
       xai: "e.g. grok-2-vision-latest",
-      gemini: "e.g. gemini-2.0-flash, gemini-1.5-pro",
+      gemini: "e.g. gemini-3.8-flash, gemini-3.5-flash-lite, gemini-2.0-flash",
       ollama: "e.g. llava, llava:13b, bakllava (must be pulled first)",
     };
 
