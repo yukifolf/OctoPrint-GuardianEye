@@ -38,14 +38,14 @@ GuardianEye watches your 3D prints through your webcam and uses AI vision to det
 1. Open OctoPrint Settings > Plugin Manager > Get More...
 2. Paste this URL:
    ```
-   https://github.com/schwarztim/OctoPrint-GuardianEye/archive/main.zip
+   https://github.com/yukifolf/OctoPrint-GuardianEye/archive/main.zip
    ```
 3. Click Install
 
 ### From pip
 
 ```bash
-pip install https://github.com/schwarztim/OctoPrint-GuardianEye/archive/main.zip
+pip install https://github.com/yukifolf/OctoPrint-GuardianEye/archive/main.zip
 ```
 
 ### For development
